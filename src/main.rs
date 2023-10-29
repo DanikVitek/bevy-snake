@@ -1,9 +1,8 @@
 use std::{env, time::Duration};
 
-use bevy::{
-    asset::LoadState, core_pipeline::clear_color::ClearColorConfig, prelude::*,
-    render::render_resource::TextureFormat, sprite::Anchor,
-};
+use bevy::{core_pipeline::clear_color::ClearColorConfig, prelude::*, sprite::Anchor};
+
+const CELL_SIZE: f32 = 32.0;
 
 fn main() {
     env::set_var("WGPU_BACKEND", "vulkan");
@@ -22,18 +21,8 @@ fn main() {
                 })
                 .build(),
         )
-        .init_resource::<SpriteHandles>()
-        // .add_state::<AppState>()
-        // .add_systems(OnEnter(AppState::LoadHandles), load_textures)
-        // .add_systems(
-        //     Update,
-        //     check_textures.run_if(in_state(AppState::LoadHandles))
-        // )
-        .add_systems(
-            /*OnEnter(AppState::Setup)*/ Startup,
-            (setup, setup_snake),
-        )
-        // .add_systems(Update, (move_snake, control_snake))
+        .add_systems(Startup, (setup, setup_snake))
+        .add_systems(Update, (move_snake, control_snake))
         .run();
 }
 
@@ -44,62 +33,6 @@ enum AppState {
     Setup,
 }
 
-#[derive(Resource, Default)]
-struct SpriteHandles {
-    handles: Vec<HandleUntyped>,
-    // snake_atlas: SnakeTextureAtlas,
-}
-
-// struct SnakeTextureAtlas {
-//     atlas: TextureAtlas,
-//     head: usize,
-//     body: usize,
-//     turn: usize,
-//     end: usize,
-// }
-
-// impl SnakeTextureAtlas {
-//     fn head(&self) -> usize {
-//         self.head
-//     }
-//
-//     fn body(&self) -> usize {
-//         self.body
-//     }
-//
-//     fn turn(&self) -> usize {
-//         self.turn
-//     }
-//
-//     fn end(&self) -> usize {
-//         self.end
-//     }
-// }
-
-// fn load_textures(mut sprite_handles: ResMut<SpriteHandles>, asset_server: Res<AssetServer>) {
-// let mut snake_atlas = TextureAtlas::new_empty(
-//     asset_server.load("sprites/snake.png"),
-//     Vec2 { x: 16.0, y: 24.0 },
-// );
-// snake_atlas.add_texture(Rect::new(8., 0., 16., 8.)); // Head
-// snake_atlas.add_texture(Rect::new(8., 8., 16., 16.)); // Body
-// snake_atlas.add_texture(Rect::new(8., 16., 16., 24.)); // Turn
-// snake_atlas.add_texture(Rect::new(0., 16., 8., 24.)); // End
-//     sprite_handles.handles = asset_server.load_folder("sprites").unwrap();
-// }
-
-// fn check_textures(
-//     mut next_state: ResMut<NextState<AppState>>,
-//     sprite_handles: Res<SpriteHandles>,
-//     asset_server: Res<AssetServer>,
-// ) {
-//     if let LoadState::Loaded =
-//         asset_server.get_group_load_state(sprite_handles.handles.iter().map(HandleUntyped::id))
-//     {
-//         next_state.set(AppState::Setup);
-//     }
-// }
-
 fn setup(mut commands: Commands) {
     commands.spawn(Camera2dBundle {
         camera_2d: Camera2d {
@@ -109,14 +42,7 @@ fn setup(mut commands: Commands) {
     });
 }
 
-fn setup_snake(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    /*sprite_handles: Res<SpriteHandles>*/
-) {
-    // TextureAtlas
-
-    // sprite_handles.handles.iter().find(|h| h.typed::<Image>().)
+fn setup_snake(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands
         .spawn((
             Snake {
@@ -131,17 +57,19 @@ fn setup_snake(
                 },
                 make_sprite(asset_server.load("sprites/snake-head.png"), Vec2::ZERO),
             ));
-            snake.spawn(SnakeTail).with_children(|tail| {
-                tail.spawn((
-                    TailPiece {
-                        direction: Direction::default(),
-                    },
-                    make_sprite(
-                        asset_server.load("sprites/snake-end.png"),
-                        Vec2 { x: 0.0, y: 1.0 },
-                    ),
-                ));
-            });
+            snake
+                .spawn((SnakeTail, SpatialBundle::default()))
+                .with_children(|tail| {
+                    tail.spawn((
+                        TailPiece {
+                            direction: Direction::default(),
+                        },
+                        make_sprite(
+                            asset_server.load("sprites/snake-end.png"),
+                            Vec2 { x: 0.0, y: -1.0 },
+                        ),
+                    ));
+                });
         });
 }
 
@@ -154,6 +82,7 @@ fn make_sprite(texture: Handle<Image>, _position @ Vec2 { x, y }: Vec2) -> Sprit
             anchor: Anchor::TopLeft,
             ..Default::default()
         },
+        visibility: Visibility::Visible,
         transform: Transform::from_xyz(x * 32.0, y * 32.0, 0.0),
         texture,
         ..Default::default()
@@ -173,18 +102,18 @@ fn move_snake(
         let mut p0 = snake_body.p0();
         let (head, mut transform) = p0.get_single_mut().unwrap();
         match head.direction {
-            Direction::Left => transform.translation.x -= 10.0,
-            Direction::Right => transform.translation.x += 10.0,
-            Direction::Up => transform.translation.y += 10.0,
-            Direction::Down => transform.translation.y -= 10.0,
+            Direction::Left => transform.translation.x -= CELL_SIZE,
+            Direction::Right => transform.translation.x += CELL_SIZE,
+            Direction::Up => transform.translation.y += CELL_SIZE,
+            Direction::Down => transform.translation.y -= CELL_SIZE,
         }
         drop(p0);
         for (mut tail, mut transform) in snake_body.p1().iter_mut() {
             match tail.direction {
-                Direction::Left => transform.translation.x -= 10.0,
-                Direction::Right => transform.translation.x += 10.0,
-                Direction::Up => transform.translation.y += 10.0,
-                Direction::Down => transform.translation.y -= 10.0,
+                Direction::Left => transform.translation.x -= CELL_SIZE,
+                Direction::Right => transform.translation.x += CELL_SIZE,
+                Direction::Up => transform.translation.y += CELL_SIZE,
+                Direction::Down => transform.translation.y -= CELL_SIZE,
             }
         }
     }
