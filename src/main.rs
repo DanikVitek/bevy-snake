@@ -52,18 +52,16 @@ fn setup_snake(mut commands: Commands, asset_server: Res<AssetServer>) {
         ))
         .with_children(|snake| {
             snake.spawn((
-                SnakeHead {
-                    direction: Direction::default(),
-                },
+                SnakeHead,
+                Direction::default(),
                 make_sprite(asset_server.load("sprites/snake-head.png"), Vec2::ZERO),
             ));
             snake
                 .spawn((SnakeTail, SpatialBundle::default()))
                 .with_children(|tail| {
                     tail.spawn((
-                        TailPiece {
-                            direction: Direction::default(),
-                        },
+                        TailPiece,
+                        Direction::default(),
                         make_sprite(
                             asset_server.load("sprites/snake-end.png"),
                             Vec2 { x: 0.0, y: -1.0 },
@@ -92,24 +90,20 @@ fn make_sprite(texture: Handle<Image>, _position @ Vec2 { x, y }: Vec2) -> Sprit
 fn move_snake(
     time: Res<Time>,
     mut snake: Query<&mut Snake>,
-    mut snake_body: ParamSet<(
-        Query<(&SnakeHead, &mut Transform)>,
-        Query<(&mut TailPiece, &mut Transform)>,
-    )>,
+    mut head: Query<(&Direction, &mut Transform), (With<SnakeHead>, Without<TailPiece>)>,
+    mut tail: Query<(&mut Direction, &mut Transform), (With<TailPiece>, Without<SnakeHead>)>,
 ) {
     let mut snake = snake.get_single_mut().unwrap();
     if snake.next_move.tick(time.delta()).just_finished() {
-        let mut p0 = snake_body.p0();
-        let (head, mut transform) = p0.get_single_mut().unwrap();
-        match head.direction {
+        let (head_direction, mut transform) = head.get_single_mut().unwrap();
+        match *head_direction {
             Direction::Left => transform.translation.x -= CELL_SIZE,
             Direction::Right => transform.translation.x += CELL_SIZE,
             Direction::Up => transform.translation.y += CELL_SIZE,
             Direction::Down => transform.translation.y -= CELL_SIZE,
         }
-        drop(p0);
-        for (mut tail, mut transform) in snake_body.p1().iter_mut() {
-            match tail.direction {
+        for (mut tail_direction, mut transform) in tail.iter_mut() {
+            match *tail_direction {
                 Direction::Left => transform.translation.x -= CELL_SIZE,
                 Direction::Right => transform.translation.x += CELL_SIZE,
                 Direction::Up => transform.translation.y += CELL_SIZE,
@@ -119,18 +113,21 @@ fn move_snake(
     }
 }
 
-fn control_snake(keyboard_input: Res<Input<KeyCode>>, mut query: Query<&mut Snake>) {
-    // for mut snake in query.iter_mut() {
-    //     if keyboard_input.just_pressed(KeyCode::Left) && !snake.direction.is_right() {
-    //         snake.direction = Direction::Left;
-    //     } else if keyboard_input.just_pressed(KeyCode::Right) && !snake.direction.is_left() {
-    //         snake.direction = Direction::Right;
-    //     } else if keyboard_input.just_pressed(KeyCode::Up) && !snake.direction.is_down() {
-    //         snake.direction = Direction::Up;
-    //     } else if keyboard_input.just_pressed(KeyCode::Down) && !snake.direction.is_up() {
-    //         snake.direction = Direction::Down;
-    //     }
-    // }
+fn control_snake(
+    keyboard_input: Res<Input<KeyCode>>,
+    mut query: Query<&mut Direction, With<SnakeHead>>,
+) {
+    for mut direction in query.iter_mut() {
+        if keyboard_input.just_pressed(KeyCode::Left) && !direction.is_right() {
+            *direction = Direction::Left;
+        } else if keyboard_input.just_pressed(KeyCode::Right) && !direction.is_left() {
+            *direction = Direction::Right;
+        } else if keyboard_input.just_pressed(KeyCode::Up) && !direction.is_down() {
+            *direction = Direction::Up;
+        } else if keyboard_input.just_pressed(KeyCode::Down) && !direction.is_up() {
+            *direction = Direction::Down;
+        }
+    }
 }
 
 #[derive(Component)]
@@ -139,19 +136,15 @@ struct Snake {
 }
 
 #[derive(Component)]
-struct SnakeHead {
-    direction: Direction,
-}
+struct SnakeHead;
 
 #[derive(Component)]
 struct SnakeTail;
 
 #[derive(Component)]
-struct TailPiece {
-    direction: Direction,
-}
+struct TailPiece;
 
-#[derive(Default)]
+#[derive(Default, Component)]
 pub enum Direction {
     Left,
     Right,
