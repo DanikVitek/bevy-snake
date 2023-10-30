@@ -5,6 +5,8 @@ use bevy::{
 };
 
 const CELL_SIZE: f32 = 32.0;
+const FIELD_WIDTH: f32 = CELL_SIZE * 25.0;
+const FIELD_HEIGHT: f32 = CELL_SIZE * 20.0;
 const STEP_DURATION: Duration = Duration::from_millis(500);
 
 fn main() {
@@ -16,7 +18,7 @@ fn main() {
                 .set(WindowPlugin {
                     primary_window: Some(Window {
                         title: "Snake".to_string(),
-                        resolution: (800.0, 640.0).into(),
+                        resolution: (FIELD_WIDTH, FIELD_HEIGHT).into(),
                         resizable: false,
                         ..Default::default()
                     }),
@@ -113,12 +115,7 @@ fn move_snake(
 
     let (id, direction, mut prev_direction, mut transform) = head.get_single_mut().unwrap();
     let direction = *direction;
-    match direction {
-        Direction::Left => transform.translation.x -= CELL_SIZE,
-        Direction::Right => transform.translation.x += CELL_SIZE,
-        Direction::Up => transform.translation.y += CELL_SIZE,
-        Direction::Down => transform.translation.y -= CELL_SIZE,
-    }
+    translate(&mut transform, direction);
     if let PrevDirection(Some(prev_direction)) = &mut *prev_direction {
         if *prev_direction != direction {
             update_direction_ev.send(UpdateDirectionEvent(id));
@@ -129,12 +126,35 @@ fn move_snake(
     }
 
     for (direction, mut transform) in pieces.iter_mut() {
-        let direction = *direction;
-        match direction {
-            Direction::Left => transform.translation.x -= CELL_SIZE,
-            Direction::Right => transform.translation.x += CELL_SIZE,
-            Direction::Up => transform.translation.y += CELL_SIZE,
-            Direction::Down => transform.translation.y -= CELL_SIZE,
+        translate(&mut transform, *direction);
+    }
+}
+
+fn translate(transform: &mut Transform, direction: Direction) {
+    match direction {
+        Direction::Left => {
+            transform.translation.x -= CELL_SIZE;
+            if transform.translation.x < -FIELD_WIDTH / 2.0 {
+                transform.translation.x = FIELD_WIDTH / 2.0 - CELL_SIZE;
+            }
+        }
+        Direction::Right => {
+            transform.translation.x += CELL_SIZE;
+            if transform.translation.x > FIELD_WIDTH / 2.0 {
+                transform.translation.x = -FIELD_WIDTH / 2.0 + CELL_SIZE;
+            }
+        }
+        Direction::Up => {
+            transform.translation.y += CELL_SIZE;
+            if transform.translation.y > FIELD_HEIGHT / 2.0 {
+                transform.translation.y = -FIELD_HEIGHT / 2.0 + CELL_SIZE;
+            }
+        }
+        Direction::Down => {
+            transform.translation.y -= CELL_SIZE;
+            if transform.translation.y < -FIELD_HEIGHT / 2.0 {
+                transform.translation.y = FIELD_HEIGHT / 2.0 - CELL_SIZE;
+            }
         }
     }
 }
@@ -177,11 +197,11 @@ fn control_snake(
     let mut direction = snake_head.get_single_mut().unwrap();
     for keycode in keyboard_input.get_just_pressed() {
         match keycode {
-            KeyCode::Left if !direction.is_right() => *direction = Direction::Left,
-            KeyCode::Right if !direction.is_left() => *direction = Direction::Right,
             KeyCode::Up if !direction.is_down() => *direction = Direction::Up,
             KeyCode::Down if !direction.is_up() => *direction = Direction::Down,
-            _ => (),
+            KeyCode::Left if !direction.is_right() => *direction = Direction::Left,
+            KeyCode::Right if !direction.is_left() => *direction = Direction::Right,
+            _ => {}
         }
     }
 }
@@ -218,33 +238,17 @@ struct UpdateDirectionEvent(Entity);
 
 #[derive(Clone, Copy, Default, Component, PartialEq, Eq)]
 enum Direction {
-    Left,
-    Right,
     #[default]
     Up,
     Down,
+    Left,
+    Right,
 }
 
 #[derive(Clone, Copy, Default, PartialEq, Eq, Component)]
 struct PrevDirection(Option<Direction>);
 
 impl Direction {
-    /// Returns `true` if the direction is [`Left`].
-    ///
-    /// [`Left`]: Direction::Left
-    #[must_use]
-    pub fn is_left(&self) -> bool {
-        matches!(self, Self::Left)
-    }
-
-    /// Returns `true` if the direction is [`Right`].
-    ///
-    /// [`Right`]: Direction::Right
-    #[must_use]
-    pub fn is_right(&self) -> bool {
-        matches!(self, Self::Right)
-    }
-
     /// Returns `true` if the direction is [`Up`].
     ///
     /// [`Up`]: Direction::Up
@@ -260,15 +264,31 @@ impl Direction {
     pub fn is_down(&self) -> bool {
         matches!(self, Self::Down)
     }
+
+    /// Returns `true` if the direction is [`Left`].
+    ///
+    /// [`Left`]: Direction::Left
+    #[must_use]
+    pub fn is_left(&self) -> bool {
+        matches!(self, Self::Left)
+    }
+
+    /// Returns `true` if the direction is [`Right`].
+    ///
+    /// [`Right`]: Direction::Right
+    #[must_use]
+    pub fn is_right(&self) -> bool {
+        matches!(self, Self::Right)
+    }
 }
 
 impl From<Direction> for Quat {
     fn from(value: Direction) -> Self {
         Quat::from_rotation_z(match value {
-            Direction::Left => std::f32::consts::FRAC_PI_2,
-            Direction::Right => std::f32::consts::FRAC_PI_2 * 3.0,
             Direction::Up => 0.0,
             Direction::Down => std::f32::consts::PI,
+            Direction::Left => std::f32::consts::FRAC_PI_2,
+            Direction::Right => std::f32::consts::FRAC_PI_2 * 3.0,
         })
     }
 }
