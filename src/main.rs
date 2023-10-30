@@ -5,6 +5,7 @@ use bevy::{
 };
 
 const CELL_SIZE: f32 = 32.0;
+const STEP_DURATION: Duration = Duration::from_millis(500);
 
 fn main() {
     env::set_var("WGPU_BACKEND", "vulkan");
@@ -57,7 +58,7 @@ fn setup_snake(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands
         .spawn((
             Snake {
-                next_move: Timer::new(Duration::from_millis(1000), TimerMode::Repeating),
+                next_move: Timer::new(STEP_DURATION, TimerMode::Repeating),
             },
             SpatialBundle::default(),
         ))
@@ -66,6 +67,7 @@ fn setup_snake(mut commands: Commands, asset_server: Res<AssetServer>) {
                 .spawn((
                     SnakeHead,
                     Direction::default(),
+                    PrevDirection::default(),
                     make_sprite(asset_server.load("sprites/snake-head.png"), Vec2::ZERO),
                 ))
                 .id();
@@ -87,7 +89,7 @@ fn make_sprite(texture: Handle<Image>, _position @ Vec2 { x, y }: Vec2) -> Sprit
     SpriteBundle {
         sprite: Sprite {
             custom_size: Some(Vec2::new(CELL_SIZE, CELL_SIZE)),
-            anchor: Anchor::TopLeft,
+            anchor: Anchor::Center,
             ..Default::default()
         },
         visibility: Visibility::Visible,
@@ -100,15 +102,35 @@ fn make_sprite(texture: Handle<Image>, _position @ Vec2 { x, y }: Vec2) -> Sprit
 fn move_snake(
     time: Res<Time>,
     mut snake: Query<&mut Snake>,
-    mut pieces: Query<(&Direction, &mut Transform)>,
+    mut head: Query<(Entity, &Direction, &mut PrevDirection, &mut Transform)>,
+    mut pieces: Query<(&Direction, &mut Transform), Without<PrevDirection>>,
+    mut update_direction_ev: EventWriter<UpdateDirectionEvent>,
 ) {
     let mut snake = snake.get_single_mut().unwrap();
     if !snake.next_move.tick(time.delta()).just_finished() {
         return;
     }
 
-    for (tail_direction, mut transform) in pieces.iter_mut() {
-        match *tail_direction {
+    let (id, direction, mut prev_direction, mut transform) = head.get_single_mut().unwrap();
+    let direction = *direction;
+    match direction {
+        Direction::Left => transform.translation.x -= CELL_SIZE,
+        Direction::Right => transform.translation.x += CELL_SIZE,
+        Direction::Up => transform.translation.y += CELL_SIZE,
+        Direction::Down => transform.translation.y -= CELL_SIZE,
+    }
+    if let PrevDirection(Some(prev_direction)) = &mut *prev_direction {
+        if *prev_direction != direction {
+            update_direction_ev.send(UpdateDirectionEvent(id));
+            *prev_direction = direction;
+        }
+    } else {
+        prev_direction.0 = Some(direction);
+    }
+
+    for (direction, mut transform) in pieces.iter_mut() {
+        let direction = *direction;
+        match direction {
             Direction::Left => transform.translation.x -= CELL_SIZE,
             Direction::Right => transform.translation.x += CELL_SIZE,
             Direction::Up => transform.translation.y += CELL_SIZE,
@@ -150,20 +172,15 @@ fn update_tail_direction(
 
 fn control_snake(
     keyboard_input: Res<Input<KeyCode>>,
-    mut snake_head: Query<(Entity, &mut Direction), With<SnakeHead>>,
-    mut update_diection_ev: EventWriter<UpdateDirectionEvent>,
+    mut snake_head: Query<&mut Direction, With<SnakeHead>>,
 ) {
-    let (id, mut direction) = snake_head.get_single_mut().unwrap();
-    let mut update_dir = |dir: &mut Direction, new_dir: Direction| {
-        *dir = new_dir;
-        update_diection_ev.send(UpdateDirectionEvent(id));
-    };
+    let mut direction = snake_head.get_single_mut().unwrap();
     for keycode in keyboard_input.get_just_pressed() {
         match keycode {
-            KeyCode::Left if !direction.is_right() => update_dir(&mut direction, Direction::Left),
-            KeyCode::Right if !direction.is_left() => update_dir(&mut direction, Direction::Right),
-            KeyCode::Up if !direction.is_down() => update_dir(&mut direction, Direction::Up),
-            KeyCode::Down if !direction.is_up() => update_dir(&mut direction, Direction::Down),
+            KeyCode::Left if !direction.is_right() => *direction = Direction::Left,
+            KeyCode::Right if !direction.is_left() => *direction = Direction::Right,
+            KeyCode::Up if !direction.is_down() => *direction = Direction::Up,
+            KeyCode::Down if !direction.is_up() => *direction = Direction::Down,
             _ => (),
         }
     }
@@ -209,13 +226,16 @@ struct PrevId(Entity);
 struct UpdateDirectionEvent(Entity);
 
 #[derive(Clone, Copy, Default, Component, PartialEq, Eq)]
-pub enum Direction {
+enum Direction {
     Left,
     Right,
     #[default]
     Up,
     Down,
 }
+
+#[derive(Clone, Copy, Default, PartialEq, Eq, Component)]
+struct PrevDirection(Option<Direction>);
 
 impl Direction {
     /// Returns `true` if the direction is [`Left`].
