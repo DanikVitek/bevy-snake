@@ -120,17 +120,16 @@ fn move_snake(
 
 fn control_snake(
     keyboard_input: Res<Input<KeyCode>>,
-    mut query: Query<&mut Direction, With<SnakeHead>>,
+    mut snake_head: Query<&mut Direction, With<SnakeHead>>,
 ) {
-    for mut direction in query.iter_mut() {
-        if keyboard_input.just_pressed(KeyCode::Left) && !direction.is_right() {
-            *direction = Direction::Left;
-        } else if keyboard_input.just_pressed(KeyCode::Right) && !direction.is_left() {
-            *direction = Direction::Right;
-        } else if keyboard_input.just_pressed(KeyCode::Up) && !direction.is_down() {
-            *direction = Direction::Up;
-        } else if keyboard_input.just_pressed(KeyCode::Down) && !direction.is_up() {
-            *direction = Direction::Down;
+    let mut direction = snake_head.get_single_mut().unwrap();
+    for keycode in keyboard_input.get_just_pressed() {
+        match keycode {
+            KeyCode::Left if !direction.is_right() => *direction = Direction::Left,
+            KeyCode::Right if !direction.is_left() => *direction = Direction::Right,
+            KeyCode::Up if !direction.is_down() => *direction = Direction::Up,
+            KeyCode::Down if !direction.is_up() => *direction = Direction::Down,
+            _ => (),
         }
     }
 }
