@@ -24,12 +24,14 @@ fn main() {
                 .build(),
         )
         .add_systems(Startup, (setup, setup_snake))
+        .add_event::<UpdateDirectionEvent>()
         .add_systems(
             Update,
             (
                 move_snake,
                 control_snake,
                 update_tail_direction.after(move_snake),
+                rotate_snake_sprite,
             ),
         )
         .run();
@@ -104,7 +106,6 @@ fn move_snake(
     if !snake.next_move.tick(time.delta()).just_finished() {
         return;
     }
-    drop(snake);
 
     for (tail_direction, mut transform) in pieces.iter_mut() {
         match *tail_direction {
@@ -121,8 +122,9 @@ fn update_tail_direction(
     tail: Query<&PrevId>,
     mut directions: ParamSet<(
         Query<&Direction>,
-        Query<(&PrevId, &mut Direction), With<TailPiece>>,
+        Query<(Entity, &PrevId, &mut Direction), With<TailPiece>>,
     )>,
+    mut update_diection_ev: EventWriter<UpdateDirectionEvent>,
 ) {
     let snake = snake.get_single().unwrap();
     if !snake.next_move.just_finished() {
@@ -135,23 +137,53 @@ fn update_tail_direction(
         .map(|PrevId(prev_id)| (prev_id, *directions.p0().get(prev_id).unwrap()))
         .collect();
 
-    directions.p1().for_each_mut(|(prev_id, mut direction)| {
-        *direction = prev_directions[&prev_id.0];
-    });
+    directions
+        .p1()
+        .for_each_mut(|(id, prev_id, mut direction)| {
+            let prev_direction = prev_directions[&prev_id.0];
+            if *direction != prev_direction {
+                *direction = prev_direction;
+                update_diection_ev.send(UpdateDirectionEvent(id))
+            }
+        });
 }
 
 fn control_snake(
     keyboard_input: Res<Input<KeyCode>>,
-    mut snake_head: Query<&mut Direction, With<SnakeHead>>,
+    mut snake_head: Query<(Entity, &mut Direction), With<SnakeHead>>,
+    mut update_diection_ev: EventWriter<UpdateDirectionEvent>,
 ) {
-    let mut direction = snake_head.get_single_mut().unwrap();
+    let (id, mut direction) = snake_head.get_single_mut().unwrap();
+    let mut update_dir = |dir: &mut Direction, new_dir: Direction| {
+        *dir = new_dir;
+        update_diection_ev.send(UpdateDirectionEvent(id));
+    };
     for keycode in keyboard_input.get_just_pressed() {
         match keycode {
-            KeyCode::Left if !direction.is_right() => *direction = Direction::Left,
-            KeyCode::Right if !direction.is_left() => *direction = Direction::Right,
-            KeyCode::Up if !direction.is_down() => *direction = Direction::Up,
-            KeyCode::Down if !direction.is_up() => *direction = Direction::Down,
+            KeyCode::Left if !direction.is_right() => update_dir(&mut direction, Direction::Left),
+            KeyCode::Right if !direction.is_left() => update_dir(&mut direction, Direction::Right),
+            KeyCode::Up if !direction.is_down() => update_dir(&mut direction, Direction::Up),
+            KeyCode::Down if !direction.is_up() => update_dir(&mut direction, Direction::Down),
             _ => (),
+        }
+    }
+}
+
+fn rotate_snake_sprite(
+    mut update_direction_ev: EventReader<UpdateDirectionEvent>,
+    mut sprite: Query<(&mut Transform, &Direction)>,
+) {
+    for UpdateDirectionEvent(id) in update_direction_ev.iter().copied() {
+        let (mut transform, direction) = sprite.get_mut(id).unwrap();
+        match direction {
+            Direction::Up => transform.rotation = Quat::from_rotation_z(0.0),
+            Direction::Down => transform.rotation = Quat::from_rotation_z(std::f32::consts::PI),
+            Direction::Left => {
+                transform.rotation = Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)
+            }
+            Direction::Right => {
+                transform.rotation = Quat::from_rotation_z(std::f32::consts::FRAC_PI_2 * 3.0)
+            }
         }
     }
 }
@@ -173,7 +205,10 @@ struct TailPiece;
 #[derive(Clone, Copy, Component)]
 struct PrevId(Entity);
 
-#[derive(Clone, Copy, Default, Component)]
+#[derive(Clone, Copy, Event)]
+struct UpdateDirectionEvent(Entity);
+
+#[derive(Clone, Copy, Default, Component, PartialEq, Eq)]
 pub enum Direction {
     Left,
     Right,
