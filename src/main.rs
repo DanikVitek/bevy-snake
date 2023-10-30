@@ -192,16 +192,7 @@ fn rotate_snake_sprite(
 ) {
     for UpdateDirectionEvent(id) in update_direction_ev.iter().copied() {
         let (mut transform, direction) = sprite.get_mut(id).unwrap();
-        match direction {
-            Direction::Up => transform.rotation = Quat::from_rotation_z(0.0),
-            Direction::Down => transform.rotation = Quat::from_rotation_z(std::f32::consts::PI),
-            Direction::Left => {
-                transform.rotation = Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)
-            }
-            Direction::Right => {
-                transform.rotation = Quat::from_rotation_z(std::f32::consts::FRAC_PI_2 * 3.0)
-            }
-        }
+        transform.rotation = direction.into();
     }
 }
 
@@ -268,5 +259,23 @@ impl Direction {
     #[must_use]
     pub fn is_down(&self) -> bool {
         matches!(self, Self::Down)
+    }
+}
+
+impl From<Direction> for Quat {
+    fn from(value: Direction) -> Self {
+        Quat::from_rotation_z(match value {
+            Direction::Left => std::f32::consts::FRAC_PI_2,
+            Direction::Right => std::f32::consts::FRAC_PI_2 * 3.0,
+            Direction::Up => 0.0,
+            Direction::Down => std::f32::consts::PI,
+        })
+    }
+}
+
+impl From<&Direction> for Quat {
+    #[inline(always)]
+    fn from(value: &Direction) -> Self {
+        Quat::from(*value)
     }
 }
