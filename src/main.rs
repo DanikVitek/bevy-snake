@@ -1,6 +1,8 @@
 use std::{env, time::Duration};
 
-use bevy::{core_pipeline::clear_color::ClearColorConfig, prelude::*, sprite::Anchor};
+use bevy::{
+    core_pipeline::clear_color::ClearColorConfig, prelude::*, sprite::Anchor, utils::HashMap,
+};
 
 const CELL_SIZE: f32 = 32.0;
 
@@ -22,7 +24,14 @@ fn main() {
                 .build(),
         )
         .add_systems(Startup, (setup, setup_snake))
-        .add_systems(Update, (move_snake, control_snake))
+        .add_systems(
+            Update,
+            (
+                move_snake,
+                control_snake,
+                update_tail_direction.after(move_snake),
+            ),
+        )
         .run();
 }
 
@@ -107,16 +116,29 @@ fn move_snake(
     }
 }
 
-// fn update_tail_direction(
-//     snake: Query<&Snake>,
-//     tail: Query<(&mut Direction, &PrevId), With<TailPiece>>,
-//     directions: Query<>
-// ) {
-//     let snake = snake.get_single().unwrap();
-//     if !snake.next_move.just_finished() {
-//         return;
-//     }
-// }
+fn update_tail_direction(
+    snake: Query<&Snake>,
+    tail: Query<&PrevId>,
+    mut directions: ParamSet<(
+        Query<&Direction>,
+        Query<(&PrevId, &mut Direction), With<TailPiece>>,
+    )>,
+) {
+    let snake = snake.get_single().unwrap();
+    if !snake.next_move.just_finished() {
+        return;
+    }
+
+    let prev_directions: HashMap<Entity, Direction> = tail
+        .iter()
+        .copied()
+        .map(|PrevId(prev_id)| (prev_id, *directions.p0().get(prev_id).unwrap()))
+        .collect();
+
+    directions.p1().for_each_mut(|(prev_id, mut direction)| {
+        *direction = prev_directions[&prev_id.0];
+    });
+}
 
 fn control_snake(
     keyboard_input: Res<Input<KeyCode>>,
