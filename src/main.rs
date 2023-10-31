@@ -14,7 +14,8 @@ use crate::{
     system::*,
 };
 
-const CELL_SIZE: f32 = 32.0;
+const SPRITE_SIZE: u8 = 8;
+const CELL_SIZE: f32 = SPRITE_SIZE as f32 * 4.0;
 const FIELD_WIDTH: i32 = 24;
 const FIELD_HEIGHT: i32 = 24;
 const VISIBLE_FIELD_WIDTH: f32 = CELL_SIZE * FIELD_WIDTH as f32;
