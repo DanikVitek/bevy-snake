@@ -12,7 +12,10 @@ pub struct SnakeHead;
 pub struct SnakePiece;
 
 #[derive(Component)]
-pub struct SnakeTail;
+pub enum SnakeTail {
+    Middle,
+    End,
+}
 
 #[derive(Clone, Copy, Component)]
 pub struct PrevId(pub Entity);

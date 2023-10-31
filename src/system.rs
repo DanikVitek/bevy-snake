@@ -3,17 +3,18 @@ use bevy::utils::HashMap;
 use rand::Rng;
 
 use crate::component::{Direction, *};
-use crate::event::*;
-use crate::resource::ExcludeSnakeDistribution;
+use crate::resource::{ExcludeSnakeDistribution, Sprites};
+use crate::{event::*, make_sprite, IntoSnakePosition};
 use crate::{CELL_SIZE, VISIBLE_FIELD_HEIGHT, VISIBLE_FIELD_WIDTH};
 
 pub fn move_snake(
     time: Res<Time>,
     mut snake: Query<&mut Snake>,
-    mut head: Query<(Entity, &Direction, &mut PrevDirection, &mut Transform)>,
-    mut pieces: Query<(&Direction, &mut Transform), Without<PrevDirection>>,
+    mut head: Query<(Entity, &Direction, &mut PrevDirection, &mut Transform), With<SnakeHead>>,
+    mut pieces: Query<(&Direction, &mut Transform), (Without<PrevDirection>, With<SnakeTail>)>,
     mut update_direction_ev: EventWriter<UpdateDirectionEvent>,
     mut step_ev: EventWriter<StepEvent>,
+    mut elongate_ev: ResMut<Events<ElongateEvent>>,
 ) {
     let mut snake = snake.get_single_mut().unwrap();
     if !snake.next_move.tick(time.delta()).just_finished() {
@@ -32,8 +33,12 @@ pub fn move_snake(
         prev_direction.0 = Some(direction);
     }
 
-    for (direction, mut transform) in pieces.iter_mut() {
-        translate(&mut transform, *direction);
+    if elongate_ev.is_empty() {
+        for (direction, mut transform) in pieces.iter_mut() {
+            translate(&mut transform, *direction);
+        }
+    } else {
+        elongate_ev.clear();
     }
 
     step_ev.send(StepEvent);
@@ -162,12 +167,56 @@ pub fn move_eaten_apple(
     mut eat_apple_ev: EventReader<EatAppleEvent>,
     mut apple: Query<&mut Transform, With<Apple>>,
     distribution: Res<ExcludeSnakeDistribution>,
+    mut win_ev: EventWriter<WinEvent>,
 ) {
     let mut rng = rand::thread_rng();
     for EatAppleEvent(apple_id) in eat_apple_ev.iter().copied() {
-        let mut apple_transform = apple.get_mut(apple_id).unwrap();
-        let pos: IVec2 = rng.sample(&*distribution);
-        apple_transform.translation =
-            Vec3::new(pos.x as f32 * CELL_SIZE, pos.y as f32 * CELL_SIZE, 0.0);
+        if let Some(pos) = rng.sample(&*distribution) {
+            let mut apple_transform = apple.get_mut(apple_id).unwrap();
+            let Vec2 { x, y } = pos.into_snake_position();
+            apple_transform.translation = Vec3::new(x, y, 0.0);
+        } else {
+            win_ev.send(WinEvent);
+        }
+    }
+}
+
+pub fn elongate_body(
+    mut eat_apple_ev: EventReader<EatAppleEvent>,
+    snake: Query<Entity, With<Snake>>,
+    head: Query<(Entity, &Transform, &Direction), With<SnakeHead>>,
+    mut piece_after_head: Query<&mut PrevId>,
+    mut commands: Commands,
+    sprites: Res<Sprites>,
+    mut elongate_ev: EventWriter<ElongateEvent>,
+) {
+    for _ in eat_apple_ev.iter() {
+        commands
+            .entity(snake.get_single().unwrap())
+            .with_children(|snake| {
+                let (
+                    head_id,
+                    Transform {
+                        translation,
+                        rotation,
+                        ..
+                    },
+                    head_direction,
+                ) = head.get_single().unwrap();
+                piece_after_head
+                    .iter_mut()
+                    .find(|prev_id| prev_id.0 == head_id)
+                    .unwrap()
+                    .0 = snake
+                    .spawn((
+                        SnakeTail::Middle,
+                        SnakePiece,
+                        PrevId(head_id),
+                        *head_direction,
+                        make_sprite(sprites.tail_middle(), *translation, Some(*rotation)),
+                    ))
+                    .id();
+            });
+        elongate_ev.send(ElongateEvent);
     }
 }
