@@ -7,12 +7,7 @@ use std::{env, time::Duration};
 
 use bevy::{core_pipeline::clear_color::ClearColorConfig, prelude::*, sprite::Anchor};
 
-use crate::{
-    component::{Direction, *},
-    event::*,
-    resource::*,
-    system::*,
-};
+use crate::{component::*, event::*, resource::*, system::*};
 
 const SPRITE_SIZE: u8 = 8;
 const CELL_SIZE: f32 = SPRITE_SIZE as f32 * 4.0;
@@ -122,7 +117,7 @@ fn setup(mut commands: Commands, sprites: Res<Sprites>, mut state: ResMut<NextSt
                 .spawn((
                     SnakeHead,
                     SnakePiece,
-                    Direction::default(),
+                    MoveDirection::default(),
                     PrevDirection::default(),
                     make_sprite(sprites.head(), IVec2::ZERO, None::<Quat>),
                 ))
@@ -130,7 +125,7 @@ fn setup(mut commands: Commands, sprites: Res<Sprites>, mut state: ResMut<NextSt
             snake.spawn((
                 SnakeTail::End,
                 SnakePiece,
-                Direction::default(),
+                MoveDirection::default(),
                 PrevId(head_id),
                 make_sprite(sprites.tail_end(), IVec2 { x: 0, y: -1 }, None::<Quat>),
             ));

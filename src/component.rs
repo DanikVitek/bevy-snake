@@ -21,7 +21,7 @@ pub enum SnakeTail {
 pub struct PrevId(pub Entity);
 
 #[derive(Clone, Copy, Default, Component, PartialEq, Eq)]
-pub enum Direction {
+pub enum MoveDirection {
     #[default]
     Up,
     Down,
@@ -30,12 +30,12 @@ pub enum Direction {
 }
 
 #[derive(Clone, Copy, Default, PartialEq, Eq, Component)]
-pub struct PrevDirection(pub Option<Direction>);
+pub struct PrevDirection(pub Option<MoveDirection>);
 
 #[derive(Component)]
 pub struct Apple;
 
-impl Direction {
+impl MoveDirection {
     /// Returns `true` if the direction is [`Up`].
     ///
     /// [`Up`]: Direction::Up
@@ -69,20 +69,20 @@ impl Direction {
     }
 }
 
-impl From<Direction> for Quat {
-    fn from(value: Direction) -> Self {
+impl From<MoveDirection> for Quat {
+    fn from(value: MoveDirection) -> Self {
         Quat::from_rotation_z(match value {
-            Direction::Up => 0.0,
-            Direction::Down => std::f32::consts::PI,
-            Direction::Left => std::f32::consts::FRAC_PI_2,
-            Direction::Right => std::f32::consts::FRAC_PI_2 * 3.0,
+            MoveDirection::Up => 0.0,
+            MoveDirection::Down => std::f32::consts::PI,
+            MoveDirection::Left => std::f32::consts::FRAC_PI_2,
+            MoveDirection::Right => std::f32::consts::FRAC_PI_2 * 3.0,
         })
     }
 }
 
-impl From<&Direction> for Quat {
+impl From<&MoveDirection> for Quat {
     #[inline(always)]
-    fn from(value: &Direction) -> Self {
+    fn from(value: &MoveDirection) -> Self {
         Quat::from(*value)
     }
 }

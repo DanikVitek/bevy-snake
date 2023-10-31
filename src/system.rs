@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use bevy::utils::HashMap;
 use rand::Rng;
 
-use crate::component::{Direction, *};
+use crate::component::*;
 use crate::resource::{ExcludeSnakeDistribution, Sprites};
 use crate::{event::*, make_sprite, IntoSnakePosition};
 use crate::{CELL_SIZE, VISIBLE_FIELD_HEIGHT, VISIBLE_FIELD_WIDTH};
@@ -10,8 +10,8 @@ use crate::{CELL_SIZE, VISIBLE_FIELD_HEIGHT, VISIBLE_FIELD_WIDTH};
 pub fn move_snake(
     time: Res<Time>,
     mut snake: Query<&mut Snake>,
-    mut head: Query<(Entity, &Direction, &mut PrevDirection, &mut Transform), With<SnakeHead>>,
-    mut pieces: Query<(&Direction, &mut Transform), (Without<PrevDirection>, With<SnakeTail>)>,
+    mut head: Query<(Entity, &MoveDirection, &mut PrevDirection, &mut Transform), With<SnakeHead>>,
+    mut pieces: Query<(&MoveDirection, &mut Transform), (Without<PrevDirection>, With<SnakeTail>)>,
     mut update_direction_ev: EventWriter<UpdateDirectionEvent>,
     mut step_ev: EventWriter<StepEvent>,
     mut elongate_ev: ResMut<Events<ElongateEvent>>,
@@ -44,27 +44,27 @@ pub fn move_snake(
     step_ev.send(StepEvent);
 }
 
-fn translate(transform: &mut Transform, direction: Direction) {
+fn translate(transform: &mut Transform, direction: MoveDirection) {
     match direction {
-        Direction::Left => {
+        MoveDirection::Left => {
             transform.translation.x -= CELL_SIZE;
             if transform.translation.x < -VISIBLE_FIELD_WIDTH / 2.0 {
                 transform.translation.x = VISIBLE_FIELD_WIDTH / 2.0 - CELL_SIZE;
             }
         }
-        Direction::Right => {
+        MoveDirection::Right => {
             transform.translation.x += CELL_SIZE;
             if transform.translation.x > VISIBLE_FIELD_WIDTH / 2.0 {
                 transform.translation.x = -VISIBLE_FIELD_WIDTH / 2.0 + CELL_SIZE;
             }
         }
-        Direction::Up => {
+        MoveDirection::Up => {
             transform.translation.y += CELL_SIZE;
             if transform.translation.y > VISIBLE_FIELD_HEIGHT / 2.0 {
                 transform.translation.y = -VISIBLE_FIELD_HEIGHT / 2.0 + CELL_SIZE;
             }
         }
-        Direction::Down => {
+        MoveDirection::Down => {
             transform.translation.y -= CELL_SIZE;
             if transform.translation.y < -VISIBLE_FIELD_HEIGHT / 2.0 {
                 transform.translation.y = VISIBLE_FIELD_HEIGHT / 2.0 - CELL_SIZE;
@@ -94,8 +94,8 @@ pub fn update_tail_direction(
     snake: Query<&Snake>,
     tail: Query<&PrevId>,
     mut directions: ParamSet<(
-        Query<&Direction>,
-        Query<(Entity, &PrevId, &mut Direction), With<SnakeTail>>,
+        Query<&MoveDirection>,
+        Query<(Entity, &PrevId, &mut MoveDirection), With<SnakeTail>>,
     )>,
     mut update_diection_ev: EventWriter<UpdateDirectionEvent>,
 ) {
@@ -104,7 +104,7 @@ pub fn update_tail_direction(
         return;
     }
 
-    let prev_directions: HashMap<Entity, Direction> = tail
+    let prev_directions: HashMap<Entity, MoveDirection> = tail
         .iter()
         .copied()
         .map(|PrevId(prev_id)| (prev_id, *directions.p0().get(prev_id).unwrap()))
@@ -123,15 +123,15 @@ pub fn update_tail_direction(
 
 pub fn control_snake(
     keyboard_input: Res<Input<KeyCode>>,
-    mut snake_head: Query<&mut Direction, With<SnakeHead>>,
+    mut snake_head: Query<&mut MoveDirection, With<SnakeHead>>,
 ) {
     let mut direction = snake_head.get_single_mut().unwrap();
     for keycode in keyboard_input.get_just_pressed() {
         match keycode {
-            KeyCode::Up if !direction.is_down() => *direction = Direction::Up,
-            KeyCode::Down if !direction.is_up() => *direction = Direction::Down,
-            KeyCode::Left if !direction.is_right() => *direction = Direction::Left,
-            KeyCode::Right if !direction.is_left() => *direction = Direction::Right,
+            KeyCode::Up if !direction.is_down() => *direction = MoveDirection::Up,
+            KeyCode::Down if !direction.is_up() => *direction = MoveDirection::Down,
+            KeyCode::Left if !direction.is_right() => *direction = MoveDirection::Left,
+            KeyCode::Right if !direction.is_left() => *direction = MoveDirection::Right,
             _ => {}
         }
     }
@@ -139,7 +139,7 @@ pub fn control_snake(
 
 pub fn rotate_snake_sprite(
     mut update_direction_ev: EventReader<UpdateDirectionEvent>,
-    mut sprite: Query<(&mut Transform, &Direction)>,
+    mut sprite: Query<(&mut Transform, &MoveDirection)>,
 ) {
     for UpdateDirectionEvent(id) in update_direction_ev.iter().copied() {
         let (mut transform, direction) = sprite.get_mut(id).unwrap();
@@ -184,7 +184,7 @@ pub fn move_eaten_apple(
 pub fn elongate_body(
     mut eat_apple_ev: EventReader<EatAppleEvent>,
     snake: Query<Entity, With<Snake>>,
-    head: Query<(Entity, &Transform, &Direction), With<SnakeHead>>,
+    head: Query<(Entity, &Transform, &MoveDirection), With<SnakeHead>>,
     mut piece_after_head: Query<&mut PrevId>,
     mut commands: Commands,
     sprites: Res<Sprites>,
