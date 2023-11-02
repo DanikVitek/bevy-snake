@@ -38,7 +38,12 @@ pub fn move_snake(
             translate(&mut transform, *direction);
         }
     } else {
-        elongate_ev.clear();
+        elongate_ev
+            .drain()
+            .skip(1)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .for_each(|e| elongate_ev.send(e));
     }
 
     step_ev.send(StepEvent);

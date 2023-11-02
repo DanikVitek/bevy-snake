@@ -6,6 +6,7 @@ mod system;
 use std::{env, time::Duration};
 
 use bevy::{core_pipeline::clear_color::ClearColorConfig, prelude::*, sprite::Anchor};
+use cfg_if::cfg_if;
 
 use crate::{component::*, event::*, resource::*, system::*};
 
@@ -18,7 +19,19 @@ const VISIBLE_FIELD_HEIGHT: f32 = CELL_SIZE * FIELD_HEIGHT as f32;
 const STEP_DURATION: Duration = Duration::from_millis(500);
 
 fn main() {
-    env::set_var("WGPU_BACKEND", "vulkan");
+    env::set_var("WGPU_BACKEND", {
+        cfg_if! {
+            if #[cfg(target_arch = "wasm32")] {
+                "webgpu"
+            } else if #[cfg(target_os = "windows")] {
+                "dx12"
+            } else if #[cfg(target_os = "macos")] {
+                "metal"
+            } else {
+                "vulkan"
+            }
+        }
+    }); // TODO: replace with `vulkan` when it's fixed
     App::new()
         .add_plugins((
             DefaultPlugins
