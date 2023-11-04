@@ -13,6 +13,6 @@ opt-level = 3
 
 
 [dependencies]
-bevy = { version = "0.11.3", features = ["dynamic_linking"] }
+bevy = { version = "0.12.0", features = ["dynamic_linking"] }
 cfg-if = "1.0.0"
 rand = { version = "0.8.5", features = ["small_rng"] }

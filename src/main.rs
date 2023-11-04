@@ -23,8 +23,8 @@ fn main() {
         cfg_if! {
             if #[cfg(target_arch = "wasm32")] {
                 "webgpu"
-            } else if #[cfg(target_os = "windows")] {
-                "dx12"
+            // } else if #[cfg(target_os = "windows")] {
+            //     "dx12"
             } else if #[cfg(target_os = "macos")] {
                 "metal"
             } else {
@@ -72,13 +72,15 @@ impl Plugin for SnakeGame {
             .add_event::<WinEvent>()
             .add_systems(
                 Update,
+                control_snake
+                    .before(move_snake)
+                    .run_if(in_state(AppState::Ready)),
+            )
+            .insert_resource(Time::<Fixed>::from_duration(STEP_DURATION))
+            .add_systems(
+                FixedUpdate,
                 (
-                    move_snake,
-                    control_snake,
-                    update_tail_direction.after(move_snake),
-                    rotate_snake_sprite
-                        .after(update_tail_direction)
-                        .after(move_snake),
+                    (move_snake, update_tail_direction, rotate_snake_sprite).chain(),
                     update_exclude_snake_distribution.after(move_snake),
                     eat_apple.after(move_snake),
                     move_eaten_apple.after(eat_apple),
@@ -119,12 +121,7 @@ fn setup(mut commands: Commands, sprites: Res<Sprites>, mut state: ResMut<NextSt
         ..Default::default()
     });
     commands
-        .spawn((
-            Snake {
-                next_move: Timer::new(STEP_DURATION, TimerMode::Repeating),
-            },
-            SpatialBundle::default(),
-        ))
+        .spawn((Snake, SpatialBundle::default()))
         .with_children(|snake| {
             let head_id = snake
                 .spawn((
@@ -132,7 +129,7 @@ fn setup(mut commands: Commands, sprites: Res<Sprites>, mut state: ResMut<NextSt
                     SnakePiece,
                     MoveDirection::default(),
                     PrevDirection::default(),
-                    make_sprite(sprites.head(), IVec2::ZERO, None::<Quat>),
+                    make_sprite(sprites.head(), Vec3::ZERO, None::<Quat>),
                 ))
                 .id();
             snake.spawn((
@@ -140,12 +137,12 @@ fn setup(mut commands: Commands, sprites: Res<Sprites>, mut state: ResMut<NextSt
                 SnakePiece,
                 MoveDirection::default(),
                 PrevId(head_id),
-                make_sprite(sprites.tail_end(), IVec2 { x: 0, y: -1 }, None::<Quat>),
+                make_sprite(sprites.tail_end(), IVec3::new(0, -1, -1), None::<Quat>),
             ));
         });
     commands.spawn((
         Apple,
-        make_sprite(sprites.apple(), IVec2::ZERO, None::<Quat>),
+        make_sprite(sprites.apple(), Vec3::new(0.0, 0.0, -2.0), None::<Quat>),
     ));
 
     state.set(AppState::Ready);
@@ -165,8 +162,7 @@ fn make_sprite(
         },
         visibility: Visibility::Visible,
         transform: {
-            let Vec2 { x, y } = position.into_snake_position();
-            Transform::from_xyz(x, y, 0.0)
+            Transform::from_translation(position.into_snake_position())
                 .with_rotation(direction.map(Into::into).unwrap_or_default())
         },
         texture,
@@ -175,25 +171,37 @@ fn make_sprite(
 }
 
 trait IntoSnakePosition {
-    fn into_snake_position(self) -> Vec2;
+    fn into_snake_position(self) -> Vec3;
 }
 
 impl IntoSnakePosition for IVec2 {
-    fn into_snake_position(self) -> Vec2 {
-        Vec2::new(self.x as f32 * CELL_SIZE, self.y as f32 * CELL_SIZE)
+    #[inline]
+    fn into_snake_position(self) -> Vec3 {
+        Vec3::new(self.x as f32 * CELL_SIZE, self.y as f32 * CELL_SIZE, 0.0)
+    }
+}
+
+impl IntoSnakePosition for IVec3 {
+    #[inline]
+    fn into_snake_position(self) -> Vec3 {
+        Vec3::new(
+            self.x as f32 * CELL_SIZE,
+            self.y as f32 * CELL_SIZE,
+            self.z as f32,
+        )
     }
 }
 
 impl IntoSnakePosition for Vec2 {
     #[inline(always)]
-    fn into_snake_position(self) -> Vec2 {
-        self
+    fn into_snake_position(self) -> Vec3 {
+        Vec3::new(self.x, self.y, 0.0)
     }
 }
 
 impl IntoSnakePosition for Vec3 {
     #[inline(always)]
-    fn into_snake_position(self) -> Vec2 {
-        Vec2::new(self.x, self.y)
+    fn into_snake_position(self) -> Vec3 {
+        self
     }
 }

@@ -1,9 +1,7 @@
 use bevy::prelude::*;
 
 #[derive(Component)]
-pub struct Snake {
-    pub next_move: Timer,
-}
+pub struct Snake;
 
 #[derive(Component)]
 pub struct SnakeHead;

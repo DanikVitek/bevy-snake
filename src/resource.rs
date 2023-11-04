@@ -75,9 +75,10 @@ impl Sprites {
             &self.tail_end,
             &self.apple,
         ) {
-            asset_server.get_group_load_state(
-                [head, tail_middle, tail_turn, tail_end, apple].map(Handle::id),
-            ) == LoadState::Loaded
+            [head, tail_middle, tail_turn, tail_end, apple]
+                .into_iter()
+                .map(|handle| asset_server.get_load_state(handle.id()).unwrap())
+                .all(|state| state == LoadState::Loaded)
         } else {
             false
         }

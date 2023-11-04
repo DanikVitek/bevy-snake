@@ -8,19 +8,12 @@ use crate::{event::*, make_sprite, IntoSnakePosition};
 use crate::{CELL_SIZE, VISIBLE_FIELD_HEIGHT, VISIBLE_FIELD_WIDTH};
 
 pub fn move_snake(
-    time: Res<Time>,
-    mut snake: Query<&mut Snake>,
     mut head: Query<(Entity, &MoveDirection, &mut PrevDirection, &mut Transform), With<SnakeHead>>,
     mut pieces: Query<(&MoveDirection, &mut Transform), (Without<PrevDirection>, With<SnakeTail>)>,
     mut update_direction_ev: EventWriter<UpdateDirectionEvent>,
     mut step_ev: EventWriter<StepEvent>,
     mut elongate_ev: ResMut<Events<ElongateEvent>>,
 ) {
-    let mut snake = snake.get_single_mut().unwrap();
-    if !snake.next_move.tick(time.delta()).just_finished() {
-        return;
-    }
-
     let (id, direction, mut prev_direction, mut transform) = head.get_single_mut().unwrap();
     let direction = *direction;
     translate(&mut transform, direction);
@@ -34,16 +27,9 @@ pub fn move_snake(
     }
 
     if elongate_ev.is_empty() {
-        for (direction, mut transform) in pieces.iter_mut() {
-            translate(&mut transform, *direction);
-        }
+        pieces.for_each_mut(|(direction, mut transform)| translate(&mut transform, *direction));
     } else {
-        elongate_ev
-            .drain()
-            .skip(1)
-            .collect::<Vec<_>>()
-            .into_iter()
-            .for_each(|e| elongate_ev.send(e));
+        elongate_ev.clear();
     }
 
     step_ev.send(StepEvent);
@@ -83,7 +69,7 @@ pub fn update_exclude_snake_distribution(
     snake: Query<&Transform, With<SnakePiece>>,
     mut exclude_snake_distribution: ResMut<ExcludeSnakeDistribution>,
 ) {
-    for _ in step_ev.iter() {
+    for _ in step_ev.read() {
         exclude_snake_distribution.positions = snake
             .iter()
             .map(|transform| {
@@ -96,7 +82,6 @@ pub fn update_exclude_snake_distribution(
 }
 
 pub fn update_tail_direction(
-    snake: Query<&Snake>,
     tail: Query<&PrevId>,
     mut directions: ParamSet<(
         Query<&MoveDirection>,
@@ -104,11 +89,6 @@ pub fn update_tail_direction(
     )>,
     mut update_diection_ev: EventWriter<UpdateDirectionEvent>,
 ) {
-    let snake = snake.get_single().unwrap();
-    if !snake.next_move.just_finished() {
-        return;
-    }
-
     let prev_directions: HashMap<Entity, MoveDirection> = tail
         .iter()
         .copied()
@@ -146,7 +126,7 @@ pub fn rotate_snake_sprite(
     mut update_direction_ev: EventReader<UpdateDirectionEvent>,
     mut sprite: Query<(&mut Transform, &MoveDirection)>,
 ) {
-    for UpdateDirectionEvent(id) in update_direction_ev.iter().copied() {
+    for UpdateDirectionEvent(id) in update_direction_ev.read().copied() {
         let (mut transform, direction) = sprite.get_mut(id).unwrap();
         transform.rotation = direction.into();
     }
@@ -158,14 +138,17 @@ pub fn eat_apple(
     apple: Query<(Entity, &Transform), With<Apple>>,
     mut eat_apple_ev: EventWriter<EatAppleEvent>,
 ) {
-    for _ in step_ev.iter() {
+    step_ev.read().for_each(|_| {
         let head_transform = snake_head.get_single().unwrap();
-        for (apple_id, apple_transform) in apple.iter() {
-            if head_transform.translation == apple_transform.translation {
-                eat_apple_ev.send(EatAppleEvent(apple_id));
-            }
-        }
-    }
+        apple
+            .iter()
+            .filter_map(|(apple_id, apple_transform)| {
+                (head_transform.translation.x == apple_transform.translation.x
+                    && head_transform.translation.y == apple_transform.translation.y)
+                    .then_some(EatAppleEvent(apple_id))
+            })
+            .for_each(|ev| eat_apple_ev.send(ev));
+    });
 }
 
 pub fn move_eaten_apple(
@@ -175,11 +158,9 @@ pub fn move_eaten_apple(
     mut win_ev: EventWriter<WinEvent>,
 ) {
     let mut rng = rand::thread_rng();
-    for EatAppleEvent(apple_id) in eat_apple_ev.iter().copied() {
+    for EatAppleEvent(apple_id) in eat_apple_ev.read().copied() {
         if let Some(pos) = rng.sample(&*distribution) {
-            let mut apple_transform = apple.get_mut(apple_id).unwrap();
-            let Vec2 { x, y } = pos.into_snake_position();
-            apple_transform.translation = Vec3::new(x, y, 0.0);
+            apple.get_mut(apple_id).unwrap().translation = pos.into_snake_position();
         } else {
             win_ev.send(WinEvent);
         }
@@ -195,7 +176,7 @@ pub fn elongate_body(
     sprites: Res<Sprites>,
     mut elongate_ev: EventWriter<ElongateEvent>,
 ) {
-    for _ in eat_apple_ev.iter() {
+    for _ in eat_apple_ev.read() {
         commands
             .entity(snake.get_single().unwrap())
             .with_children(|snake| {
@@ -218,7 +199,15 @@ pub fn elongate_body(
                         SnakePiece,
                         PrevId(head_id),
                         *head_direction,
-                        make_sprite(sprites.tail_middle(), *translation, Some(*rotation)),
+                        make_sprite(
+                            sprites.tail_middle(),
+                            {
+                                let mut t = *translation;
+                                t.z = -1.0;
+                                t
+                            },
+                            Some(*rotation),
+                        ),
                     ))
                     .id();
             });
